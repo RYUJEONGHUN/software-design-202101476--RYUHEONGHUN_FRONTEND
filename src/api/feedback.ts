@@ -35,6 +35,13 @@ export interface UpdateFeedbackRequest {
   visibleToParent: boolean;
 }
 
+export interface FeedbackSearchCondition {
+  category?: FeedbackCategory;
+  startDate?: string;
+  endDate?: string;
+  keyword?: string;
+}
+
 export async function createFeedback(
   payload: CreateFeedbackRequest
 ): Promise<string> {
@@ -59,10 +66,19 @@ export async function updateFeedback(
 }
 
 export async function getStudentFeedbacks(
-  studentId: number
+  studentId: number,
+  condition: FeedbackSearchCondition = {}
 ): Promise<FeedbackItem[]> {
   const response = await api.get<ApiResponse<FeedbackItem[]>>(
-    `/api/v1/feedbacks/student/${studentId}/all`
+    `/api/v1/feedbacks/student/${studentId}/all`,
+    {
+      params: {
+        category: condition.category || undefined,
+        startDate: condition.startDate || undefined,
+        endDate: condition.endDate || undefined,
+        keyword: condition.keyword?.trim() || undefined,
+      },
+    }
   );
 
   return response.data.data;

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { searchStudents, type StudentSearchItem } from "@/api/student";
-import { createGrade, getGradeChart, type GradeChartResponse } from "@/api/grade";
+import {
+  createGrade,
+  downloadGradeReport,
+  getGradeChart,
+  type GradeChartResponse,
+  type GradeReportFormat,
+} from "@/api/grade";
 import {
   RadarChart,
   PolarGrid,
@@ -12,8 +18,10 @@ import {
 } from "recharts";
 
 type ChartRow = {
+  gradeId: number;
   subject: string;
   myScore: number;
+  letterGrade: string;
   classAverage: number;
   totalAverage: number;
 };
@@ -38,6 +46,8 @@ export default function GradesPage() {
   const [newScore, setNewScore] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [reportLoading, setReportLoading] = useState<GradeReportFormat | null>(null);
+  const [reportError, setReportError] = useState("");
 
   const fetchStudents = async () => {
     try {
@@ -129,15 +139,33 @@ export default function GradesPage() {
     }
   };
 
+  const handleDownloadReport = async (format: GradeReportFormat) => {
+    if (!selectedStudent) return;
+
+    try {
+      setReportLoading(format);
+      setReportError("");
+      await downloadGradeReport(selectedStudent.id, semester, format);
+    } catch (err: any) {
+      console.error(err);
+      setReportError(
+        err?.response?.data?.message || "성적 보고서 다운로드에 실패했습니다."
+      );
+    } finally {
+      setReportLoading(null);
+    }
+  };
+
   const allRows = useMemo<ChartRow[]>(() => {
     if (!chartData) return [];
 
-    const subjectNames = Object.keys(chartData.myScores || {});
-    return subjectNames.map((subject) => ({
-      subject,
-      myScore: chartData.myScores?.[subject] ?? 0,
-      classAverage: chartData.classAverages?.[subject] ?? 0,
-      totalAverage: chartData.totalAverages?.[subject] ?? 0,
+    return chartData.scores.map((score) => ({
+      gradeId: score.gradeId,
+      subject: score.subjectName,
+      myScore: score.score,
+      letterGrade: score.letterGrade,
+      classAverage: score.classAverage,
+      totalAverage: score.totalAverage,
     }));
   }, [chartData]);
 
@@ -280,7 +308,25 @@ export default function GradesPage() {
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              {chartData && (
+                <>
+                  <div className="rounded-2xl bg-emerald-50 px-5 py-3 text-emerald-700">
+                    <div className="text-sm font-medium">평균</div>
+                    <div className="text-2xl font-bold">
+                      {chartData.averageScore}점
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-5 py-3 text-slate-700">
+                    <div className="text-sm font-medium">종합 등급</div>
+                    <div className="text-2xl font-bold">
+                      {chartData.overallGrade}
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="rounded-2xl bg-blue-50 px-5 py-3 text-blue-700">
                 <div className="text-sm font-medium">선택 학기</div>
                 <div className="text-2xl font-bold">{semester}</div>
@@ -297,8 +343,33 @@ export default function GradesPage() {
                   </option>
                 ))}
               </select>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadReport("EXCEL")}
+                  disabled={reportLoading !== null || chartLoading}
+                  className="h-14 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {reportLoading === "EXCEL" ? "Excel 생성 중" : "Excel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadReport("PDF")}
+                  disabled={reportLoading !== null || chartLoading}
+                  className="h-14 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {reportLoading === "PDF" ? "PDF 생성 중" : "PDF"}
+                </button>
+              </div>
             </div>
           </div>
+
+          {reportError && (
+            <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {reportError}
+            </div>
+          )}
 
           <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
             <div className="rounded-2xl border border-slate-100 p-5">
@@ -428,15 +499,17 @@ export default function GradesPage() {
                     <tr className="text-left text-base font-semibold text-slate-600">
                       <th className="px-5 py-4">과목</th>
                       <th className="px-5 py-4">내 점수</th>
+                      <th className="px-5 py-4">등급</th>
                       <th className="px-5 py-4">반 평균</th>
                       <th className="px-5 py-4">전체 평균</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRows.map((row) => (
-                      <tr key={row.subject} className="border-t border-slate-100 text-base">
+                      <tr key={row.gradeId} className="border-t border-slate-100 text-base">
                         <td className="px-5 py-4 font-medium text-slate-900">{row.subject}</td>
                         <td className="px-5 py-4 text-slate-700">{row.myScore}</td>
+                        <td className="px-5 py-4 font-semibold text-slate-700">{row.letterGrade}</td>
                         <td className="px-5 py-4 text-slate-700">{row.classAverage}</td>
                         <td className="px-5 py-4 text-slate-700">{row.totalAverage}</td>
                       </tr>

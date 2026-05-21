@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import {
+  downloadFeedbackReport,
+  type ReportFormat,
+} from "@/api/report";
 import { searchStudents, type StudentSearchItem } from "@/api/student";
 import {
   createFeedback,
@@ -6,6 +10,7 @@ import {
   updateFeedback,
   type FeedbackCategory,
   type FeedbackItem,
+  type FeedbackSearchCondition,
 } from "@/api/feedback";
 
 function categoryLabel(category: FeedbackCategory) {
@@ -55,6 +60,12 @@ export default function FeedbacksPage() {
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
+  const [filterCategory, setFilterCategory] = useState<FeedbackCategory | "">("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterKeyword, setFilterKeyword] = useState("");
+  const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
+  const [reportError, setReportError] = useState("");
 
   const [createCategory, setCreateCategory] = useState<FeedbackCategory>("GRADE");
   const [createContent, setCreateContent] = useState("");
@@ -102,12 +113,22 @@ export default function FeedbacksPage() {
     await fetchStudents();
   };
 
-  const fetchFeedbacks = async (studentId: number) => {
+  const getFeedbackCondition = (): FeedbackSearchCondition => ({
+    category: filterCategory || undefined,
+    startDate: filterStartDate || undefined,
+    endDate: filterEndDate || undefined,
+    keyword: filterKeyword.trim() || undefined,
+  });
+
+  const fetchFeedbacks = async (
+    studentId: number,
+    condition: FeedbackSearchCondition = getFeedbackCondition()
+  ) => {
   try {
     setFeedbackLoading(true);
     setFeedbackError("");
 
-    const data = await getStudentFeedbacks(studentId);
+    const data = await getStudentFeedbacks(studentId, condition);
 
     const sorted = [...data].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -122,6 +143,49 @@ export default function FeedbacksPage() {
     setFeedbackLoading(false);
   }
  };
+
+  const handleSearchFeedbacks = async () => {
+    if (!selectedStudent) return;
+    await fetchFeedbacks(selectedStudent.id);
+  };
+
+  const handleResetFeedbackFilters = async () => {
+    const emptyCondition: FeedbackSearchCondition = {};
+
+    setFilterCategory("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setFilterKeyword("");
+
+    if (selectedStudent) {
+      await fetchFeedbacks(selectedStudent.id, emptyCondition);
+    }
+  };
+
+  const handleDownloadReport = async (format: ReportFormat) => {
+    if (!selectedStudent) return;
+
+    try {
+      setReportLoading(format);
+      setReportError("");
+
+      await downloadFeedbackReport({
+        studentId: selectedStudent.id,
+        category: filterCategory,
+        startDate: filterStartDate,
+        endDate: filterEndDate,
+        keyword: filterKeyword,
+        format,
+      });
+    } catch (err: any) {
+      console.error(err);
+      setReportError(
+        err?.response?.data?.message || "피드백 보고서 다운로드에 실패했습니다."
+      );
+    } finally {
+      setReportLoading(null);
+    }
+  };
 
   const handleSelectStudent = async (student: StudentSearchItem) => {
     setSelectedStudent(student);
@@ -379,6 +443,102 @@ export default function FeedbacksPage() {
           <p className="mt-2 text-base text-slate-500">
             선택한 학생의 전체 피드백 이력을 확인합니다.
           </p>
+
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <select
+              value={filterCategory}
+              onChange={(e) =>
+                setFilterCategory(e.target.value as FeedbackCategory | "")
+              }
+              disabled={!selectedStudent}
+              className="h-12 min-w-0 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">전체 카테고리</option>
+              <option value="GRADE">성적</option>
+              <option value="BEHAVIOR">행동 발달</option>
+              <option value="ATTENDANCE">출결</option>
+              <option value="ATTITUDE">수업 태도</option>
+            </select>
+
+            <input
+              type="date"
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+              disabled={!selectedStudent}
+              className="h-12 min-w-0 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            />
+
+            <input
+              type="date"
+              value={filterEndDate}
+              onChange={(e) => setFilterEndDate(e.target.value)}
+              disabled={!selectedStudent}
+              className="h-12 min-w-0 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            />
+
+            <input
+              value={filterKeyword}
+              onChange={(e) => setFilterKeyword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSearchFeedbacks();
+                }
+              }}
+              disabled={!selectedStudent}
+              placeholder="내용 키워드"
+              className="h-12 min-w-0 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+            />
+          </div>
+
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleResetFeedbackFilters}
+              disabled={!selectedStudent || feedbackLoading}
+              className="h-10 rounded-xl bg-slate-100 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              초기화
+            </button>
+            <button
+              type="button"
+              onClick={handleSearchFeedbacks}
+              disabled={!selectedStudent || feedbackLoading}
+              className="h-10 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              필터 적용
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-sm text-slate-500">
+              현재 필터 조건으로 피드백 요약 보고서를 다운로드합니다.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownloadReport("EXCEL")}
+                disabled={!selectedStudent || reportLoading !== null}
+                className="h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {reportLoading === "EXCEL" ? "Excel 생성 중" : "Excel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadReport("PDF")}
+                disabled={!selectedStudent || reportLoading !== null}
+                className="h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {reportLoading === "PDF" ? "PDF 생성 중" : "PDF"}
+              </button>
+            </div>
+          </div>
+
+          {reportError && (
+            <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {reportError}
+            </div>
+          )}
 
           {!selectedStudent ? (
             <div className="mt-6 text-sm text-slate-400">먼저 학생을 선택하세요.</div>

@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getStudentDetail, type StudentDetailResponse } from "@/api/student";
+import { getStudentDetail } from "@/api/student";
+import StudentDetailGradeSection from "@/components/students/student-detail-grade-section";
+import StudentRecordSection from "@/components/students/student-record-section";
+import { StudentDetailResponse } from "@/types/student";
+
+function formatDate(value: string) {
+  if (!value) return "-";
+  return value.length >= 10 ? value.slice(0, 10) : value;
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+  return value.replace("T", " ").slice(0, 16);
+}
 
 export default function StudentDetailPage() {
   const { id } = useParams();
@@ -8,156 +21,171 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const fetchStudentDetail = async () => {
+    if (!id) return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getStudentDetail(id);
+      setStudent(data);
+    } catch (err) {
+      console.error(err);
+      setError("학생 정보를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchStudent = async () => {
-      if (!id) return;
-
-      try {
-        setLoading(true);
-        setError("");
-        const data = await getStudentDetail(id);
-        setStudent(data);
-      } catch (err) {
-        console.error(err);
-        setError("학생부 정보를 불러오지 못했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStudent();
+    fetchStudentDetail();
   }, [id]);
 
   if (loading) {
-    return <div className="text-sm text-slate-500">학생부 정보를 불러오는 중...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="h-40 animate-pulse rounded-[32px] bg-white shadow-sm" />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="h-80 animate-pulse rounded-[32px] bg-white shadow-sm" />
+          <div className="h-80 animate-pulse rounded-[32px] bg-white shadow-sm" />
+        </div>
+        <div className="h-72 animate-pulse rounded-[32px] bg-white shadow-sm" />
+      </div>
+    );
   }
 
-  if (error) {
-    return <div className="text-sm text-red-500">{error}</div>;
-  }
-
-  if (!student) {
-    return <div className="text-sm text-slate-500">학생 정보가 없습니다.</div>;
+  if (error || !student) {
+    return (
+      <div className="rounded-3xl border border-red-100 bg-red-50 p-6 text-red-600 shadow-sm">
+        {error || "학생 정보를 불러올 수 없습니다."}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-950">학생부 조회</h1>
-        <p className="mt-2 text-base text-slate-500">
-          학생 기본 정보와 최근 상담/피드백, 성적 요약을 확인합니다.
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          학생 상세
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          학생 기본 정보와 학생부, 최근 상담/피드백, 성적 요약을 확인합니다.
         </p>
       </div>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-7">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="flex items-start justify-between gap-6">
           <div>
-            <h2 className="text-4xl font-extrabold tracking-tight text-slate-950">
+            <h2 className="text-5xl font-bold tracking-tight text-slate-900">
               {student.name}
             </h2>
-            <p className="mt-3 text-lg text-slate-500">
+            <p className="mt-4 text-xl text-slate-500">
               {student.grade}학년 {student.classNum}반 · 학번 {student.studentNumber}
             </p>
           </div>
 
-          <div className="rounded-2xl bg-blue-50 px-5 py-3 text-blue-700">
-            <div className="text-sm font-medium">출석률</div>
-            <div className="text-2xl font-bold">{student.attendanceRate}%</div>
+          <div className="rounded-[24px] bg-blue-50 px-6 py-5 text-center">
+            <p className="text-sm font-semibold text-blue-600">출석률</p>
+            <p className="mt-2 text-4xl font-bold text-blue-700">
+              {student.attendanceRate}%
+            </p>
           </div>
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-bold tracking-tight text-slate-950">과목별 점수</h3>
-          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100">
-            <table className="min-w-full">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-base font-semibold text-slate-600">
-                  <th className="px-5 py-4">과목명</th>
-                  <th className="px-5 py-4">학기</th>
-                  <th className="px-5 py-4">점수</th>
-                </tr>
-              </thead>
-              <tbody>
-                {student.subjectScores.map((subject, index) => (
-                  <tr
-                    key={`${subject.subjectName}-${subject.semester}-${index}`}
-                    className="border-t border-slate-100 text-base"
-                  >
-                    <td className="px-5 py-4 font-medium text-slate-900">
-                      {subject.subjectName}
-                    </td>
-                    <td className="px-5 py-4 text-slate-700">
-                      {subject.semester}
-                    </td>
-                    <td className="px-5 py-4 text-slate-700">
-                      {subject.score}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <StudentDetailGradeSection
+          student={student}
+          onRefresh={fetchStudentDetail}
+        />
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-2xl font-bold tracking-tight text-slate-950">최근 피드백</h3>
-          <div className="mt-6 space-y-4">
-            {student.recentFeedbacks.length === 0 ? (
-              <div className="rounded-2xl bg-slate-50 px-5 py-4 text-sm text-slate-500">
-                최근 피드백이 없습니다.
-              </div>
-            ) : (
-              student.recentFeedbacks.map((feedback) => (
-                <div key={feedback.id} className="rounded-2xl bg-slate-50 px-5 py-4">
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+              최근 피드백
+            </h3>
+          </div>
+
+          <div className="space-y-3">
+            {student.recentFeedbacks.length > 0 ? (
+              student.recentFeedbacks.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4"
+                >
                   <div className="flex items-center justify-between gap-4">
-                    <div className="font-semibold text-slate-900">{feedback.teacherName}</div>
-                    <div className="text-sm text-slate-400">{feedback.createdAt}</div>
+                    <p className="text-base font-semibold text-slate-900">
+                      {item.teacherName}
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      {formatDateTime(item.createdAt)}
+                    </p>
                   </div>
-                  <p className="mt-2 text-sm text-slate-700">{feedback.content}</p>
+
+                  <p className="mt-3 text-sm leading-6 text-slate-700">
+                    {item.content}
+                  </p>
                 </div>
               ))
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-12 text-center text-slate-400">
+                피드백이 없습니다.
+              </div>
             )}
           </div>
         </section>
-
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-          <h3 className="text-2xl font-bold tracking-tight text-slate-950">최근 상담</h3>
-          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100">
-            <table className="min-w-full">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-base font-semibold text-slate-600">
-                  <th className="px-5 py-4">상담일</th>
-                  <th className="px-5 py-4">교사</th>
-                  <th className="px-5 py-4">내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {student.recentConsultations.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-5 py-8 text-center text-sm text-slate-500">
-                      최근 상담 내역이 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  student.recentConsultations.map((consultation) => (
-                    <tr key={consultation.id} className="border-t border-slate-100 text-base">
-                      <td className="px-5 py-4 text-slate-700">
-                        {consultation.consultationDate}
-                      </td>
-                      <td className="px-5 py-4 font-medium text-slate-900">
-                        {consultation.teacherName}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">{consultation.content}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
       </div>
+
+      <StudentRecordSection studentId={student.id} />
+
+      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-5">
+          <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+            최근 상담
+          </h3>
+        </div>
+
+        <div className="overflow-hidden rounded-[24px] border border-slate-200">
+          <table className="w-full border-collapse">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-sm font-semibold text-slate-500">
+                <th className="px-5 py-4">상담일</th>
+                <th className="px-5 py-4">교사</th>
+                <th className="px-5 py-4">내용</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {student.recentConsultations.length > 0 ? (
+                student.recentConsultations.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-t border-slate-100 text-sm text-slate-700"
+                  >
+                    <td className="px-5 py-4">
+                      {formatDate(item.consultationDate)}
+                    </td>
+                    <td className="px-5 py-4 font-semibold text-slate-900">
+                      {item.teacherName}
+                    </td>
+                    <td className="px-5 py-4">{item.content}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={3}
+                    className="px-5 py-10 text-center text-sm text-slate-400"
+                  >
+                    상담 내역이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

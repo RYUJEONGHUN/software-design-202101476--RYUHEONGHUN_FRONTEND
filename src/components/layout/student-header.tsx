@@ -1,4 +1,5 @@
 import NotificationBell from "@/components/layout/notification-bell";
+import { logout } from "@/lib/logout";
 
 type StudentHeaderProps = {
   studentName?: string;
@@ -26,7 +27,7 @@ export default function StudentHeader({
         <div className="flex items-center gap-3">
           <NotificationBell />
 
-          <button className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 transition hover:bg-slate-50">
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-600">
               {firstLetter}
             </div>
@@ -38,8 +39,14 @@ export default function StudentHeader({
               </p>
             </div>
 
-            <span className="hidden text-slate-400 md:block">▾</span>
-          </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
     </header>

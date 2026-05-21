@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  downloadGradeReport,
+  type GradeReportFormat,
+} from "@/api/grade";
+import {
   getMyStudentDetail,
   type StudentDetailResponse,
 } from "@/api/student";
@@ -19,6 +23,8 @@ export default function StudentGradesPage() {
   const [selectedSemester, setSelectedSemester] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reportLoading, setReportLoading] = useState<GradeReportFormat | null>(null);
+  const [reportError, setReportError] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,6 +70,23 @@ export default function StudentGradesPage() {
     return Math.round((total / semesterScores.length) * 10) / 10;
   }, [semesterScores]);
 
+  const handleDownloadReport = async (format: GradeReportFormat) => {
+    if (!student || !selectedSemester) return;
+
+    try {
+      setReportLoading(format);
+      setReportError("");
+      await downloadGradeReport(student.id, selectedSemester, format);
+    } catch (err: any) {
+      console.error(err);
+      setReportError(
+        err?.response?.data?.message || "성적 보고서 다운로드에 실패했습니다."
+      );
+    } finally {
+      setReportLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -94,7 +117,7 @@ export default function StudentGradesPage() {
       </div>
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.2fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.2fr_1fr_1fr] xl:grid-cols-[1.2fr_1fr_1fr_1fr]">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-600">
               학기 선택
@@ -125,7 +148,35 @@ export default function StudentGradesPage() {
               {semesterScores.length}개
             </p>
           </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
+            <p className="text-sm text-slate-500">보고서 다운로드</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownloadReport("EXCEL")}
+                disabled={!selectedSemester || reportLoading !== null}
+                className="h-10 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {reportLoading === "EXCEL" ? "생성 중" : "Excel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadReport("PDF")}
+                disabled={!selectedSemester || reportLoading !== null}
+                className="h-10 rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {reportLoading === "PDF" ? "생성 중" : "PDF"}
+              </button>
+            </div>
+          </div>
         </div>
+
+        {reportError && (
+          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            {reportError}
+          </div>
+        )}
       </section>
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">

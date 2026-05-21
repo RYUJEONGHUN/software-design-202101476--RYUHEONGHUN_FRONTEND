@@ -1,4 +1,9 @@
-export type AppRole = "ROLE_TEACHER" | "ROLE_STUDENT" | "ROLE_ADMIN" | "ROLE_PARENT" | "ROLE_GUEST";
+export type AppRole =
+  | "ROLE_TEACHER"
+  | "ROLE_STUDENT"
+  | "ROLE_ADMIN"
+  | "ROLE_PARENT"
+  | "ROLE_GUEST";
 
 type JwtPayload = {
   sub?: string;
@@ -44,7 +49,21 @@ export function parseJwt(token: string): JwtPayload | null {
 export function getRoleFromToken(token: string): AppRole | null {
   const payload = parseJwt(token);
   if (!payload?.role) return null;
-  return payload.role as AppRole;
+
+  switch (payload.role) {
+    case "TEACHER":
+      return "ROLE_TEACHER";
+    case "STUDENT":
+      return "ROLE_STUDENT";
+    case "ADMIN":
+      return "ROLE_ADMIN";
+    case "PARENT":
+      return "ROLE_PARENT";
+    case "GUEST":
+      return "ROLE_GUEST";
+    default:
+      return payload.role as AppRole;
+  }
 }
 
 export function getEmailFromToken(token: string): string | null {

@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  downloadConsultationReport,
+  type ReportFormat,
+} from "@/api/report";
 import { searchStudents, type StudentSearchItem } from "@/api/student";
 import {
   createConsultation,
   searchConsultations,
+  updateConsultation,
   type ConsultationItem,
 } from "@/api/consultation";
 
@@ -12,7 +17,12 @@ function getToday() {
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
-  return value;
+  return value.slice(0, 10);
+}
+
+function toDateInputValue(value: string | null | undefined) {
+  if (!value) return "";
+  return value.slice(0, 10);
 }
 
 function formatDateTime(value: string) {
@@ -31,6 +41,7 @@ function formatDateTime(value: string) {
 }
 
 export default function ConsultationsPage() {
+  const [searchStudentId, setSearchStudentId] = useState("");
   const [studentName, setStudentName] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -59,6 +70,14 @@ export default function ConsultationsPage() {
   const [createError, setCreateError] = useState("");
 
   const [expandedIds, setExpandedIds] = useState<number[]>([]);
+  const [editingConsultation, setEditingConsultation] =
+    useState<ConsultationItem | null>(null);
+  const [editConsultationDate, setEditConsultationDate] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editNextPlanDate, setEditNextPlanDate] = useState("");
+  const [editError, setEditError] = useState("");
+  const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
+  const [reportError, setReportError] = useState("");
 
   const toggleExpanded = (id: number) => {
     setExpandedIds((prev) =>
@@ -67,6 +86,7 @@ export default function ConsultationsPage() {
   };
 
   const fetchConsultations = async (override?: {
+    studentId?: number;
     studentName?: string;
     teacherName?: string;
     startDate?: string;
@@ -78,28 +98,35 @@ export default function ConsultationsPage() {
       setConsultationError("");
 
       const data = await searchConsultations({
+          studentId:
+            override && "studentId" in override
+              ? override.studentId
+              : searchStudentId
+                ? Number(searchStudentId)
+                : undefined,
+
           studentName:
-            override?.studentName !== undefined
+            override && "studentName" in override
               ? override.studentName
               : studentName.trim() || undefined,
 
           teacherName:
-            override?.teacherName !== undefined
+            override && "teacherName" in override
               ? override.teacherName
               : teacherName.trim() || undefined,
 
           startDate:
-            override?.startDate !== undefined
+            override && "startDate" in override
               ? override.startDate
               : startDate || undefined,
 
           endDate:
-            override?.endDate !== undefined
+            override && "endDate" in override
               ? override.endDate
               : endDate || undefined,
 
           keyword:
-            override?.keyword !== undefined
+            override && "keyword" in override
               ? override.keyword
               : keyword.trim() || undefined,
       });
@@ -128,6 +155,7 @@ export default function ConsultationsPage() {
   };
 
   const handleResetConsultationFilters = async () => {
+    setSearchStudentId("");
     setStudentName("");
     setTeacherName("");
     setStartDate("");
@@ -135,6 +163,7 @@ export default function ConsultationsPage() {
     setKeyword("");
 
     await fetchConsultations({
+      studentId: undefined,
       studentName: undefined,
       teacherName: undefined,
       startDate: undefined,
@@ -170,10 +199,20 @@ export default function ConsultationsPage() {
     handleSearchStudents();
   }, []);
 
-  const handleSelectStudent = (student: StudentSearchItem) => {
+  const handleSelectStudent = async (student: StudentSearchItem) => {
     setSelectedStudent(student);
+    setSearchStudentId(String(student.id));
+    setStudentName(student.name);
     setCreateMessage("");
     setCreateError("");
+    await fetchConsultations({
+      studentId: student.id,
+      studentName: student.name,
+      teacherName: teacherName.trim() || undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      keyword: keyword.trim() || undefined,
+    });
   };
 
   const handleCreateConsultation = async () => {
@@ -214,6 +253,120 @@ export default function ConsultationsPage() {
     }
   };
 
+  const openEditModal = (consultation: ConsultationItem) => {
+    setEditingConsultation(consultation);
+    setEditConsultationDate(toDateInputValue(consultation.consultationDate));
+    setEditContent(consultation.content);
+    setEditNextPlanDate(toDateInputValue(consultation.nextPlanDate));
+    setEditError("");
+  };
+
+  const handleUpdateConsultation = async () => {
+    if (!editingConsultation) return;
+
+    if (!editConsultationDate) {
+      setEditError("상담일을 입력하세요.");
+      return;
+    }
+
+    if (!editContent.trim()) {
+      setEditError("상담 내용을 입력하세요.");
+      return;
+    }
+
+    try {
+      setEditError("");
+
+      await updateConsultation(editingConsultation.id, {
+        consultationDate: editConsultationDate,
+        content: editContent.trim(),
+        nextPlanDate: editNextPlanDate || null,
+      });
+
+      setEditingConsultation(null);
+      await fetchConsultations();
+
+      setConsultations((prev) =>
+        prev.map((item) =>
+          item.id === editingConsultation.id
+            ? {
+                ...item,
+                consultationDate: editConsultationDate,
+                content: editContent.trim(),
+                nextPlanDate: editNextPlanDate || null,
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      console.error(err);
+      setEditError(err?.response?.data?.message || "상담 수정에 실패했습니다.");
+    }
+  };
+
+  const resolveReportStudentId = async () => {
+    if (searchStudentId) return Number(searchStudentId);
+
+    const trimmedStudentName = studentName.trim();
+
+    if (!trimmedStudentName) return null;
+
+    if (selectedStudent?.name === trimmedStudentName) {
+      return selectedStudent.id;
+    }
+
+    const data = await searchStudents({
+      name: trimmedStudentName,
+      page: 0,
+      size: 10,
+      sort: ["name,asc"],
+    });
+    const exactMatches = data.content.filter(
+      (student) => student.name === trimmedStudentName
+    );
+
+    if (exactMatches.length === 1) {
+      const [student] = exactMatches;
+
+      setSelectedStudent(student);
+      setSearchStudentId(String(student.id));
+      return student.id;
+    }
+
+    return null;
+  };
+
+  const handleDownloadReport = async (format: ReportFormat) => {
+    try {
+      setReportLoading(format);
+      setReportError("");
+
+      const studentId = await resolveReportStudentId();
+
+      if (!studentId) {
+        setReportError("보고서를 다운로드할 학생을 학생 검색에서 선택하세요.");
+        return;
+      }
+
+      await downloadConsultationReport({
+        studentId,
+        startDate,
+        endDate,
+        keyword,
+        format,
+      });
+    } catch (err: any) {
+      console.error(err);
+      setReportError(
+        err?.response?.data?.message || "상담 보고서 다운로드에 실패했습니다."
+      );
+    } finally {
+      setReportLoading(null);
+    }
+  };
+
+  const canTryDownloadReport = Boolean(searchStudentId || studentName.trim());
+
   return (
     <div className="space-y-8">
       <div>
@@ -231,7 +384,29 @@ export default function ConsultationsPage() {
           </p>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-5">
+        {searchStudentId && (
+          <div className="mt-6 flex flex-wrap items-center gap-2 rounded-2xl bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            <span className="font-semibold">선택 학생</span>
+            <span>
+              {studentName || selectedStudent?.name}
+              {selectedStudent?.studentNumber
+                ? ` (${selectedStudent.studentNumber})`
+                : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchStudentId("");
+                setStudentName("");
+              }}
+              className="ml-auto rounded-xl bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              선택 해제
+            </button>
+          </div>
+        )}
+
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <input
             value={studentName}
             onChange={(e) => setStudentName(e.target.value)}
@@ -280,6 +455,37 @@ export default function ConsultationsPage() {
           </button>
         </div>
 
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+          <p className="text-sm text-slate-500">
+            선택 학생의 상담 보고서를 현재 기간/키워드 조건으로 다운로드합니다.
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleDownloadReport("EXCEL")}
+              disabled={!canTryDownloadReport || reportLoading !== null}
+              className="h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reportLoading === "EXCEL" ? "Excel 생성 중" : "Excel"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownloadReport("PDF")}
+              disabled={!canTryDownloadReport || reportLoading !== null}
+              className="h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reportLoading === "PDF" ? "PDF 생성 중" : "PDF"}
+            </button>
+          </div>
+        </div>
+
+        {reportError && (
+          <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            {reportError}
+          </div>
+        )}
+
         {consultationLoading ? (
           <div className="mt-8 text-sm text-slate-500">상담 내역을 불러오는 중...</div>
         ) : consultationError ? (
@@ -289,75 +495,75 @@ export default function ConsultationsPage() {
             조회된 상담 내역이 없습니다.
           </div>
         ) : (
-          <div className="mt-8 space-y-4">
+          <div className="mt-8 space-y-3">
             {consultations.map((item) => {
               const expanded = expandedIds.includes(item.id);
 
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-5"
+                  className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4"
                 >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                        {item.studentName}
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        학생 {item.studentName}
                       </span>
                       <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                        {item.studentNumber}
+                        학번 {item.studentNumber}
                       </span>
-                      <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                        {item.teacherName}
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        교사 {item.teacherName}
                       </span>
                     </div>
 
-                    <div className="text-sm text-slate-400">
+                    <div className="whitespace-nowrap text-sm text-slate-400">
                       등록일시 {formatDateTime(item.createdAt)}
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <div className="text-xs text-slate-400">상담일</div>
-                      <div className="mt-1 text-sm font-medium text-slate-700">
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+                    <span>
+                      상담일{" "}
+                      <strong className="font-semibold text-slate-800">
                         {formatDate(item.consultationDate)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <div className="text-xs text-slate-400">다음 계획일</div>
-                      <div className="mt-1 text-sm font-medium text-slate-700">
+                      </strong>
+                    </span>
+                    <span>
+                      다음 계획일{" "}
+                      <strong className="font-semibold text-slate-800">
                         {formatDate(item.nextPlanDate)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-white px-4 py-3">
-                      <div className="text-xs text-slate-400">상담 ID</div>
-                      <div className="mt-1 text-sm font-medium text-slate-700">
-                        {item.id}
-                      </div>
-                    </div>
+                      </strong>
+                    </span>
                   </div>
 
-                  <div className="mt-4 rounded-xl bg-white px-4 py-4">
-                    <div className="text-xs text-slate-400">상담 내용</div>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                  <div className="mt-3 flex flex-col gap-3 rounded-xl bg-white px-4 py-3 md:flex-row md:items-end md:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-6 text-slate-700">
                       {expanded
                         ? item.content
                         : `${item.content.slice(0, 120)}${
                             item.content.length > 120 ? "..." : ""
                           }`}
-                    </p>
+                      </p>
 
-                    {item.content.length > 120 && (
-                      <button
-                        onClick={() => toggleExpanded(item.id)}
-                        className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        {expanded ? "접기" : "더보기"}
-                      </button>
-                    )}
+                      {item.content.length > 120 && (
+                        <button
+                          onClick={() => toggleExpanded(item.id)}
+                          className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          {expanded ? "접기" : "더보기"}
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(item)}
+                      className="h-10 rounded-xl bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                    >
+                      수정
+                    </button>
                   </div>
                 </div>
               );
@@ -535,6 +741,85 @@ export default function ConsultationsPage() {
           </div>
         </section>
       </div>
+
+      {editingConsultation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
+          <div className="w-full max-w-xl rounded-[28px] bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-950">
+                  상담 수정
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {editingConsultation.studentName} · {editingConsultation.studentNumber}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditingConsultation(null)}
+                className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-600">
+                    상담일
+                  </label>
+                  <input
+                    type="date"
+                    value={editConsultationDate}
+                    onChange={(e) => setEditConsultationDate(e.target.value)}
+                    className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-600">
+                    다음 계획일
+                  </label>
+                  <input
+                    type="date"
+                    value={editNextPlanDate}
+                    onChange={(e) => setEditNextPlanDate(e.target.value)}
+                    className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-600">
+                  상담 내용
+                </label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {editError && (
+                <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {editError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleUpdateConsultation}
+                className="h-12 w-full rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                수정 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

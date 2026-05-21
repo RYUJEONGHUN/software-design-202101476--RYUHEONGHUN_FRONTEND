@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  getAccessToken,
   getRedirectPathByRole,
   getRoleFromToken,
   saveAccessToken,
@@ -12,12 +13,16 @@ export default function LoginSuccessPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<LoginSuccessStatus>("processing");
   const [errorMessage, setErrorMessage] = useState("");
+  const processedRef = useRef(false);
 
   useEffect(() => {
     const run = async () => {
+      if (processedRef.current) return;
+      processedRef.current = true;
+
       try {
         const params = new URLSearchParams(window.location.search);
-        const accessToken = params.get("accessToken");
+        const accessToken = params.get("accessToken") ?? getAccessToken();
 
         if (!accessToken) {
           setStatus("error");
@@ -30,7 +35,6 @@ export default function LoginSuccessPage() {
         const role = getRoleFromToken(accessToken);
         const redirectPath = getRedirectPathByRole(role);
 
-        window.history.replaceState({}, document.title, "/login-success");
         navigate(redirectPath, { replace: true });
       } catch (error) {
         console.error(error);

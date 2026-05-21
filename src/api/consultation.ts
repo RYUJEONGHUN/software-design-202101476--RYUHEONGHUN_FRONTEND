@@ -13,7 +13,14 @@ export interface CreateConsultationRequest {
   nextPlanDate?: string | null;
 }
 
+export interface UpdateConsultationRequest {
+  consultationDate: string;
+  content: string;
+  nextPlanDate?: string | null;
+}
+
 export interface ConsultationSearchCondition {
+  studentId?: number;
   studentName?: string;
   teacherName?: string;
   startDate?: string;
@@ -37,6 +44,18 @@ export async function createConsultation(
 ): Promise<string> {
   const response = await api.post<ApiResponse<string>>(
     "/api/v1/consultations",
+    payload
+  );
+
+  return response.data.data;
+}
+
+export async function updateConsultation(
+  consultationId: number,
+  payload: UpdateConsultationRequest
+): Promise<string> {
+  const response = await api.patch<ApiResponse<string>>(
+    `/api/v1/consultations/${consultationId}`,
     payload
   );
 

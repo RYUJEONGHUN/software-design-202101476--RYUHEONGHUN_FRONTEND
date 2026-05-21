@@ -5,7 +5,9 @@ import LoginSuccessPage from "@/pages/auth/login-success-page";
 
 import RoleRoute from "@/routes/role-route";
 
+import AdminLayout from "@/components/layout/admin-layout";
 import AppLayout from "@/components/layout/app-layout";
+import ParentLayout from "@/components/layout/parent-layout";
 import StudentLayout from "@/components/layout/student-layout";
 
 import DashboardPage from "@/pages/teacher/dashboard/dashboard-page";
@@ -53,14 +55,14 @@ export function AppRouter() {
       </Route>
 
       <Route element={<RoleRoute allow={["ROLE_ADMIN"]} />}>
-        <Route path="/admin" element={<AppLayout />}>
+        <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboardPage />} />
         </Route>
       </Route>
 
       <Route element={<RoleRoute allow={["ROLE_PARENT"]} />}>
-        <Route path="/parent" element={<AppLayout />}>
+        <Route path="/parent" element={<ParentLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<ParentDashboardPage />} />
         </Route>

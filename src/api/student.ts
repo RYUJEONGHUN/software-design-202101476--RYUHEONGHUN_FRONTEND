@@ -1,60 +1,14 @@
 import { api } from "./axios";
-
-export interface StudentSearchItem {
-  id: number;
-  name: string;
-  studentNumber: string;
-  grade: number;
-  classNum: number;
-  absenceCount: number;
-  attendanceCount: number;
-  averageScore: number;
-  lastConsultationContent: string;
-}
-
-export interface StudentSearchPage {
-  content: StudentSearchItem[];
-  empty: boolean;
-  first: boolean;
-  last: boolean;
-  number: number;
-  numberOfElements: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-}
-
-export interface RecentConsultation {
-  id: number;
-  teacherName: string;
-  content: string;
-  consultationDate: string;
-}
-
-export interface RecentFeedback {
-  id: number;
-  teacherName: string;
-  content: string;
-  createdAt: string;
-}
-
-export interface SubjectScore {
-  subjectName: string;
-  score: number;
-  semester: string;
-}
-
-export interface StudentDetailResponse {
-  attendanceRate: number;
-  classNum: number;
-  grade: number;
-  id: number;
-  name: string;
-  recentConsultations: RecentConsultation[];
-  recentFeedbacks: RecentFeedback[];
-  studentNumber: string;
-  subjectScores: SubjectScore[];
-}
+import type {
+  StudentSearchItem,
+  StudentSearchPage,
+  RecentConsultation,
+  RecentFeedback,
+  SubjectScore,
+  StudentDetailResponse,
+  StudentRecord,
+  SaveStudentRecordRequest,
+} from "@/types/student";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -113,3 +67,36 @@ export async function getMyStudentDetail(): Promise<StudentDetailResponse> {
 
   return response.data.data;
 }
+
+export async function getStudentRecords(
+  studentId: string | number
+): Promise<StudentRecord[]> {
+  const response = await api.get<ApiResponse<StudentRecord[]>>(
+    `/api/v1/students/${studentId}/records`
+  );
+
+  return response.data.data;
+}
+
+export async function saveStudentRecord(
+  studentId: string | number,
+  request: SaveStudentRecordRequest
+): Promise<StudentRecord> {
+  const response = await api.patch<ApiResponse<StudentRecord>>(
+    `/api/v1/students/${studentId}/records`,
+    request
+  );
+
+  return response.data.data;
+}
+
+export type {
+  StudentSearchItem,
+  StudentSearchPage,
+  RecentConsultation,
+  RecentFeedback,
+  SubjectScore,
+  StudentDetailResponse,
+  StudentRecord,
+  SaveStudentRecordRequest,
+};
